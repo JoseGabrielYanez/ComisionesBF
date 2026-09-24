@@ -231,7 +231,7 @@ export default function App() {
     <div className="min-h-screen bg-paper text-ink">
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-12">
         <header className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Conversor de Excel</h1>
+          <h1 className="text-2xl font-semibold tracking-tight"> Hola Esteban, puedes cargar los archivos de comisiones</h1>
           <p className="mt-1 text-sm text-slate-600">
             Convierte tus archivos .xls a .xlsx, únelos en uno solo o súmales una hoja
             adicional — todo desde el navegador, sin subir nada a ningún servidor.
