@@ -784,6 +784,67 @@ export function aplicarCruceSucursalPorStock(libro, nombreHojaConsulta) {
  * La fila TOTAL ya contiene =SUM(T2:Tn), por lo que Excel recalculará el
  * total automáticamente al abrir el archivo.
  */
+
+/**
+ * Ajusta el Flete (columna P) según la Sucursal obtenida en AB.
+ *
+ * Si la sucursal contiene alguno de estos nombres:
+ *   paicavi, trebol, ohiggins, prat
+ * el flete queda en $85.000.
+ * En cualquier otra sucursal se mantiene en $27.000.
+ *
+ * Se escribe como fórmula para que el valor sea dinámico y se actualice
+ * automáticamente si cambia la Sucursal (AB).
+ * La hoja "notas de venta" queda excluida.
+ */
+export function aplicarFletePorSucursal(libro) {
+  if (!libro) return;
+
+  const sucursalesFlete85000 = ['paicavi', 'trebol', 'ohiggins', 'prat'];
+
+  libro.SheetNames.forEach((nombreHoja) => {
+    if (normalizarNombreConsulta(nombreHoja) === 'notasdeventa') return;
+
+    const ws = libro.Sheets[nombreHoja];
+    if (!ws || !ws['!ref']) return;
+
+    const encabezadoT = String(getCell(ws, 0, 19)?.v ?? '').trim().toUpperCase();
+    if (encabezadoT !== 'ADM') return;
+
+    const limites = obtenerLimitesHoja(ws);
+    if (limites.maxR < 1) return;
+
+    let finDatos = limites.maxR + 1;
+
+    // La última fila TOTAL no recibe el cálculo del Flete.
+    if (String(getCell(ws, limites.maxR, 0)?.v ?? '').trim().toUpperCase() === 'TOTAL') {
+      finDatos -= 1;
+    }
+
+    if (finDatos < 2) return;
+
+    const condiciones = sucursalesFlete85000
+      .map((nombre) => `ISNUMBER(SEARCH("${nombre}",AB2))`)
+      .join(',');
+
+    for (let fila = 2; fila <= finDatos; fila += 1) {
+      const formula = `IF(OR(${condiciones.replace(/AB2/g, `AB${fila}`)}),85000,27000)`;
+
+      // P = Flete. Se deja como fórmula para que Excel determine el valor
+      // según la Sucursal de AB en cada fila.
+      establecerFormula(ws, `P${fila}`, formula, undefined);
+
+      const celda = getCell(ws, fila - 1, 15);
+      if (celda) {
+        celda.z = '#,##0';
+        celda.t = 'n';
+      }
+    }
+  });
+
+  return libro;
+}
+
 export function aplicarValorAdmEnHojas(libro, valorAdm) {
   if (!libro || !Number.isFinite(Number(valorAdm))) return;
 

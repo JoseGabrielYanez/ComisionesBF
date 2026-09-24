@@ -24,6 +24,7 @@ import {
   detectarNombreSucursal,
   renombrarHojaConsultaPorSucursal,
   aplicarCruceSucursalPorStock,
+  aplicarFletePorSucursal,
   aplicarValorAdmEnHojas,
   quitarExtension,
 } from './utils/excelUtils';
@@ -176,6 +177,7 @@ export default function App() {
             const nombreSucursal = detectarNombreSucursal(libroFinal, hojaConsulta);
             aplicarCruceChasis(libroFinal, hojaConsulta);
             aplicarCruceSucursalPorStock(libroFinal, hojaConsulta, nombreSucursal);
+            aplicarFletePorSucursal(libroFinal);
           }
         }
 
@@ -204,6 +206,7 @@ export default function App() {
               const nombreSucursal = detectarNombreSucursal(libro, hojaConsulta);
               aplicarCruceChasis(libro, hojaConsulta);
               aplicarCruceSucursalPorStock(libro, hojaConsulta, nombreSucursal);
+              aplicarFletePorSucursal(libro);
             }
           }
 
@@ -315,7 +318,7 @@ export default function App() {
                     autoComplete="off"
                     value={admVisible}
                     onChange={onCambiarAdm}
-                    placeholder="18.490"
+                    placeholder="18.500"
                     className="tabular w-full bg-transparent font-display text-3xl outline-none placeholder:text-slate-300"
                   />
                 </div>
