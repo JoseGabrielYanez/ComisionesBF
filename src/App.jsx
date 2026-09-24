@@ -315,7 +315,7 @@ export default function App() {
                     autoComplete="off"
                     value={admVisible}
                     onChange={onCambiarAdm}
-                    placeholder="27.000"
+                    placeholder="18.490"
                     className="tabular w-full bg-transparent font-display text-3xl outline-none placeholder:text-slate-300"
                   />
                 </div>
