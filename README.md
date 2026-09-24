@@ -86,4 +86,3 @@ independiente y se agrega al final del resultado. **Nunca se aplica la
 transformación de datos sobre ese archivo.** Sus nombres de hoja se conservan
 (sin extensiones `.xls`, `.xlsx` o `.xlsm`) para permitir, por ejemplo, que una
 hoja llamada `NV` siga siendo utilizada por `XLOOKUP`.
-# ComisionesBF

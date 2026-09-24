@@ -776,6 +776,56 @@ export function aplicarCruceSucursalPorStock(libro, nombreHojaConsulta) {
 }
 
 /**
+ * Carga el valor ADM indicado por el usuario en la columna T (ADM) de cada
+ * hoja principal del libro. La hoja "notas de venta" y cualquier hoja que
+ * no tenga estructura de reporte quedan fuera.
+ *
+ * El valor se escribe en todas las filas de datos, no en la fila TOTAL.
+ * La fila TOTAL ya contiene =SUM(T2:Tn), por lo que Excel recalculará el
+ * total automáticamente al abrir el archivo.
+ */
+export function aplicarValorAdmEnHojas(libro, valorAdm) {
+  if (!libro || !Number.isFinite(Number(valorAdm))) return;
+
+  const valor = Number(valorAdm);
+
+  libro.SheetNames.forEach((nombreHoja) => {
+    if (normalizarNombreConsulta(nombreHoja) === 'notasdeventa') return;
+
+    const ws = libro.Sheets[nombreHoja];
+    if (!ws || !ws['!ref']) return;
+
+    const limites = obtenerLimitesHoja(ws);
+    if (limites.maxR < 1) return;
+
+    // Solo hojas transformadas: ADM debe estar en T1.
+    const encabezadoT = String(getCell(ws, 0, 19)?.v ?? '').trim().toUpperCase();
+    if (encabezadoT !== 'ADM') return;
+
+    let finDatos = limites.maxR + 1;
+    const ultimaCeldaA = getCell(ws, limites.maxR, 0);
+    if (String(ultimaCeldaA?.v ?? '').trim().toUpperCase() === 'TOTAL') {
+      finDatos -= 1;
+    }
+
+    for (let fila = 2; fila <= finDatos; fila += 1) {
+      establecerValor(ws, `T${fila}`, valor);
+      const celda = getCell(ws, fila - 1, 19);
+      if (celda) {
+        celda.z = '#,##0';
+      }
+    }
+
+    // Mantiene la fórmula dinámica del total de ADM.
+    if (String(ultimaCeldaA?.v ?? '').trim().toUpperCase() === 'TOTAL') {
+      establecerFormula(ws, `T${finDatos + 1}`, `=SUM(T2:T${finDatos})`);
+    }
+
+    normalizarRef(ws);
+  });
+}
+
+/**
  * Detecta el nombre de la sucursal leyendo la primera línea de la consulta.
  */
 export function detectarNombreSucursal(libro, nombreHojaConsulta) {

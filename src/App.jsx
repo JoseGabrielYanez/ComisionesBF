@@ -22,6 +22,7 @@ import {
   detectarNombreSucursal,
   renombrarHojaConsultaPorSucursal,
   aplicarCruceSucursalPorStock,
+  aplicarValorAdmEnHojas,
   quitarExtension,
 } from './utils/excelUtils';
 
@@ -56,6 +57,7 @@ export default function App() {
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
+  const [valorAdm, setValorAdm] = useState('');
 
   const inputArchivosRef = useRef(null);
   const inputExtraRef = useRef(null);
@@ -141,6 +143,13 @@ export default function App() {
         librosPrincipales.forEach(({ nombre, libro }) => {
           agregarHojasDeLibro(libroFinal, libro, nombre, nombresUsados);
         });
+
+        // El valor ADM ingresado en el formulario se aplica a cada hoja
+        // principal creada dentro de archivo_unido.xlsx. La hoja opcional
+        // (notas de venta) queda completamente fuera de esta operación.
+        if (valorAdm !== '') {
+          aplicarValorAdmEnHojas(libroFinal, Number(valorAdm));
+        }
 
         if (libroExtra) {
           // IMPORTANTE: el archivo adicional queda fuera de la
@@ -307,6 +316,28 @@ export default function App() {
                 </span>
               </span>
             </label>
+          </section>
+
+          {/* Valor ADM */}
+          <section className="p-6">
+            <h2 className="mb-1 font-medium">Valor ADM</h2>
+            <p className="mb-3 text-sm text-slate-500">
+              Este valor se cargará en la columna ADM de cada hoja principal del archivo unido.
+              La hoja <strong>notas de venta</strong> no se modifica.
+            </p>
+            <label className="block text-sm font-medium text-slate-700" htmlFor="valor-adm">
+              Monto ADM
+            </label>
+            <input
+              id="valor-adm"
+              type="number"
+              min="0"
+              step="1"
+              value={valorAdm}
+              onChange={(e) => setValorAdm(e.target.value)}
+              placeholder="Ej: 27000"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
           </section>
 
           {/* Hoja adicional */}
