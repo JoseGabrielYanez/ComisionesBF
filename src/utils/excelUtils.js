@@ -283,15 +283,17 @@ function establecerValor(ws, referencia, valor) {
 function establecerFormula(ws, referencia, formula, valorCalculado = undefined) {
   const celda = ws[referencia] ?? {};
 
-  celda.t = 'n';
-  celda.f = formula;
+  // SheetJS almacena la fórmula sin el signo igual inicial.
+  celda.f = String(formula).replace(/^=/, '');
 
-  // SheetJS no calcula fórmulas. Si no existe un valor previo,
-  // dejamos el resultado como undefined para que Excel lo recalcule.
+  // SheetJS no calcula fórmulas. Guardamos el resultado conocido como caché
+  // para que también se vea en visores que no recalculan el libro.
   if (valorCalculado !== undefined) {
     celda.v = valorCalculado;
+    celda.t = typeof valorCalculado === 'number' ? 'n' : 'str';
   } else {
     delete celda.v;
+    celda.t = 'n';
   }
 
   ws[referencia] = celda;
@@ -307,11 +309,18 @@ function numeroCelda(ws, row, col) {
     const texto = celda.v.trim().replace(/,$/, '').replace(/\s/g, '');
     if (!texto) return null;
 
-    // Admite números como 370824, 370.824 y 370.824,50.
-    if (/^-?\d+(?:\.\d+)?(?:,\d+)?$/.test(texto)) {
-      const normalizado = texto.includes(',')
-        ? texto.replace(/\./g, '').replace(',', '.')
-        : texto;
+    let normalizado = null;
+    if (/^-?\d{1,3}(?:\.\d{3})+$/.test(texto)) {
+      normalizado = texto.replace(/\./g, '');
+    } else if (/^-?\d{1,3}(?:\.\d{3})*,\d+$/.test(texto)) {
+      normalizado = texto.replace(/\./g, '').replace(',', '.');
+    } else if (/^-?\d+,\d+$/.test(texto)) {
+      normalizado = texto.replace(',', '.');
+    } else if (/^-?\d+(?:\.\d+)?$/.test(texto)) {
+      normalizado = texto;
+    }
+
+    if (normalizado !== null) {
       const numero = Number(normalizado);
       return Number.isFinite(numero) ? numero : null;
     }
@@ -326,7 +335,7 @@ function calcularValorAgp(ws, fila) {
 }
 
 function calcularMargenContable(ws, fila) {
-  const columnas = [11, 10, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+  const columnas = [11, 10, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
   const valores = columnas.map((col) => numeroCelda(ws, fila - 1, col) ?? 0);
 
   return (
@@ -376,6 +385,18 @@ function normalizarTextoBusqueda(valor) {
     .replace(/,$/, '')
     .replace(/\s+/g, ' ')
     .toLowerCase();
+}
+
+function crearMapaPorStock(ws, columnaResultado) {
+  const limites = obtenerLimitesHoja(ws);
+  const mapa = new Map();
+  for (let fila = 1; fila <= limites.maxR; fila += 1) {
+    const stock = normalizarTextoBusqueda(getCell(ws, fila, 4)?.v);
+    const resultado = getCell(ws, fila, columnaResultado)?.v;
+    if (!stock || resultado == null || String(resultado).trim() === '') continue;
+    if (!mapa.has(stock)) mapa.set(stock, resultado);
+  }
+  return mapa;
 }
 
 function obtenerNombreSucursalSeguro(nombre) {
@@ -432,8 +453,8 @@ export function transformarHojaSegunScript(ws) {
   establecerValor(ws, 'R1', 'Patente');
   establecerValor(ws, 'T1', 'ADM');
   establecerValor(ws, 'U1', 'Costo Kms');
-  establecerValor(ws, 'V1', 'Bono Marca');
-  establecerValor(ws, 'W1', 'Bono Financiamiento');
+  establecerValor(ws, 'V1', 'Bono Veh');
+  establecerValor(ws, 'W1', 'Bono Santander');
 
   // Quita el relleno del encabezado, equivalente a clear() del fill.
   const encabezado = obtenerLimitesHoja(ws);
@@ -468,13 +489,14 @@ export function transformarHojaSegunScript(ws) {
   establecerValor(ws, 'S1', 'Agp');
 
   if (fin >= 2) {
-    establecerFormula(ws, 'S2', '=IF(N2>17000,17822,11100)');
+    establecerFormula(ws, 'S2', '=IF(N2>17000,17822,11100)', calcularValorAgp(ws, 2));
 
     for (let fila = 3; fila <= fin; fila += 1) {
       establecerFormula(
         ws,
         `S${fila}`,
         `=IF(N${fila}>17000,17822,11100)`,
+        calcularValorAgp(ws, fila),
       );
     }
 
@@ -484,6 +506,7 @@ export function transformarHojaSegunScript(ws) {
       ws,
       'X2',
       '=L2-K2+N2-O2-P2-Q2-R2-S2-T2+U2+V2+W2',
+      calcularMargenContable(ws, 2),
     );
 
     for (let fila = 3; fila <= fin; fila += 1) {
@@ -491,14 +514,15 @@ export function transformarHojaSegunScript(ws) {
         ws,
         `X${fila}`,
         `=L${fila}-K${fila}+N${fila}-O${fila}-P${fila}-Q${fila}-R${fila}-S${fila}-T${fila}+U${fila}+V${fila}+W${fila}`,
+        calcularMargenContable(ws, fila),
       );
     }
 
     // Y2 = +X2 y autofill.
-    establecerFormula(ws, 'Y2', '=X2');
+    establecerFormula(ws, 'Y2', '=X2', calcularMargenContable(ws, 2));
 
     for (let fila = 3; fila <= fin; fila += 1) {
-      establecerFormula(ws, `Y${fila}`, `=X${fila}`);
+      establecerFormula(ws, `Y${fila}`, `=X${fila}`, calcularMargenContable(ws, fila));
     }
   }
 
@@ -515,10 +539,16 @@ export function transformarHojaSegunScript(ws) {
 
   // 8. Totales: el script coloca SUM en J(fin+2) y rellena hasta Y.
   const filaTotal = fin + 2;
-  establecerFormula(ws, `J${filaTotal}`, `=SUM(J2:J${fin})`);
-  for (let col = 11; col <= 25; col += 1) {
-    const letra = XLSX.utils.encode_col(col - 1);
-    establecerFormula(ws, `${letra}${filaTotal}`, `=SUM(${letra}2:${letra}${fin})`);
+  const columnasTotales = Array.from({ length: 16 }, (_, indice) => indice + 9);
+  const totales = calcularTotalesNumericos(ws, 2, fin, columnasTotales);
+  for (let col = 9; col <= 24; col += 1) {
+    const letra = XLSX.utils.encode_col(col);
+    establecerFormula(
+      ws,
+      `${letra}${filaTotal}`,
+      `=SUM(${letra}2:${letra}${fin})`,
+      totales[col] ?? 0,
+    );
   }
 
   // IMPORTANTE: establecerValor() no amplía !ref automáticamente.
@@ -619,6 +649,7 @@ export function aplicarCruceChasis(libro, nombreHojaConsulta) {
   if (limitesConsulta.maxR < 0) return;
 
   const nombreHojaFormula = nombreHojaConsulta.replace(/'/g, "''");
+  const chasisPorStock = crearMapaPorStock(consulta, 12);
 
   libro.SheetNames.forEach((nombreHoja) => {
     if (nombreHoja === nombreHojaConsulta) return;
@@ -634,10 +665,13 @@ export function aplicarCruceChasis(libro, nombreHojaConsulta) {
     const finDatos = obtenerFinDatos(ws);
 
     for (let fila = 2; fila <= finDatos; fila += 1) {
+      const stock = normalizarTextoBusqueda(getCell(ws, fila - 1, 7)?.v);
+      const chasis = chasisPorStock.get(stock) ?? 'No Encontrado';
       establecerFormula(
         ws,
         `AA${fila}`,
-        `=VLOOKUP(H${fila},'${nombreHojaFormula}'!$E:$M,9,FALSE)`,
+        `=IFERROR(VLOOKUP(H${fila},'${nombreHojaFormula}'!$E:$M,9,FALSE),"No Encontrado")`,
+        chasis,
       );
     }
 
@@ -657,6 +691,7 @@ export function aplicarCruceLocal(libro, nombreHojaConsulta) {
   if (!nombreHojaConsulta || !libro.Sheets[nombreHojaConsulta]) return;
 
   const nombreHojaFormula = nombreHojaConsulta.replace(/'/g, "''");
+  const localPorStock = crearMapaPorStock(libro.Sheets[nombreHojaConsulta], 35);
   libro.SheetNames.forEach((nombreHoja) => {
     if (nombreHoja === nombreHojaConsulta) return;
 
@@ -666,10 +701,13 @@ export function aplicarCruceLocal(libro, nombreHojaConsulta) {
     establecerValor(ws, 'AB1', 'Local');
     const finDatos = obtenerFinDatos(ws);
     for (let fila = 2; fila <= finDatos; fila += 1) {
+      const stock = normalizarTextoBusqueda(getCell(ws, fila - 1, 7)?.v);
+      const local = localPorStock.get(stock) ?? '';
       establecerFormula(
         ws,
         `AB${fila}`,
-        `=VLOOKUP(H${fila},'${nombreHojaFormula}'!$E:$AJ,32,FALSE)`,
+        `=IFERROR(VLOOKUP(H${fila},'${nombreHojaFormula}'!$E:$AJ,32,FALSE),"")`,
+        local,
       );
     }
 
@@ -709,6 +747,7 @@ export function aplicarFletePorSucursal(libro, nombreHojaConsulta) {
   const sucursalesFlete85000 = ['paicavi', 'trebol', 'ohiggins', 'prat'];
   const nombreHojaFormula = String(nombreHojaConsulta || '').replace(/'/g, "''");
   if (!nombreHojaFormula || !libro.Sheets[nombreHojaConsulta]) return;
+  const localPorStock = crearMapaPorStock(libro.Sheets[nombreHojaConsulta], 35);
 
   libro.SheetNames.forEach((nombreHoja) => {
     if (normalizarNombreConsulta(nombreHoja) === 'notasdeventa') return;
@@ -727,6 +766,11 @@ export function aplicarFletePorSucursal(libro, nombreHojaConsulta) {
     if (finDatos < 2) return;
 
     for (let fila = 2; fila <= finDatos; fila += 1) {
+      const stock = normalizarTextoBusqueda(getCell(ws, fila - 1, 7)?.v);
+      const nombreLocal = normalizarNombreConsulta(localPorStock.get(stock) ?? '');
+      const fleteCalculado = sucursalesFlete85000.some((nombre) => nombreLocal.includes(nombre))
+        ? 85000
+        : 27000;
       const busquedaSucursal = `IFERROR(VLOOKUP(H${fila},'${nombreHojaFormula}'!$E:$AJ,32,FALSE),"")`;
       const condiciones = sucursalesFlete85000
         .map((nombre) => `ISNUMBER(SEARCH("${nombre}",${busquedaSucursal}))`)
@@ -735,7 +779,7 @@ export function aplicarFletePorSucursal(libro, nombreHojaConsulta) {
 
       // P = Flete. La sucursal se consulta directamente para no ocupar AB,
       // que pertenece a las columnas Acc/Dif del formato de salida.
-      establecerFormula(ws, `P${fila}`, formula, undefined);
+      establecerFormula(ws, `P${fila}`, formula, fleteCalculado);
 
       const celda = getCell(ws, fila - 1, 15);
       if (celda) {
@@ -844,7 +888,12 @@ export function aplicarValorAdmEnHojas(libro, valorAdm) {
 
     // Mantiene la fórmula dinámica del total de ADM.
     if (getCell(ws, limites.maxR, 9)?.f && /^SUM\(/i.test(getCell(ws, limites.maxR, 9).f)) {
-      establecerFormula(ws, `T${finDatos + 2}`, `=SUM(T2:T${finDatos})`);
+      establecerFormula(
+        ws,
+        `T${finDatos + 2}`,
+        `=SUM(T2:T${finDatos})`,
+        valor * (finDatos - 1),
+      );
     }
 
     normalizarRef(ws);

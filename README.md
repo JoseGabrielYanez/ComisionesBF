@@ -79,6 +79,7 @@ al Office Script indicado para este conversor:
 - coloca las fórmulas de totales en `J(fin+2):Y(fin+2)`;
 - limpia una coma final en valores monetarios cuando viene desde el archivo de origen;
 - convierte valores numéricos de texto con coma final y aplica `#,##0`; Excel los muestra con punto de miles en configuración regional chilena.
+- guarda también resultados calculados en las fórmulas para que se vean en Render y en visores que no recalculan el libro al abrirlo.
 
 La hoja de consulta de nota de venta se mantiene íntegramente sin transformación.
 
