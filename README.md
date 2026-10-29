@@ -67,15 +67,18 @@ Los archivos principales pasan automáticamente por una transformación equivale
 al Office Script indicado para este conversor:
 
 - elimina filas con la primera columna vacía;
-- inserta/elimina las columnas en la misma secuencia del script;
-- crea `No`, `Costos`, `Combustible` y `ADM`;
+- inserta/elimina las columnas en la misma secuencia del script (la inserción opcional de Q permanece desactivada);
+- crea `No`, `Costos`, `Combustible`, `ADM` y la columna `Costo Kms`;
+- organiza bonos y márgenes en las columnas de la plantilla, y conserva `Autos en Pago`, `Acc` y `Dif`;
 - rellena `No`, `Combustible` y el costo fijo;
 - genera las fórmulas de `Agp`, `Margen Contable` y `Y`;
-- agrega `Chasis` como última columna (`AA`);
-- cuando se adjunta la consulta de nota de venta, cruza `H` de cada reporte contra `E` de esa hoja y devuelve `M` de la fila encontrada mediante `XLOOKUP`;
-- agrega la fila de totales;
+- agrega `Chasis` en `AA` y `Local` en `AB`, después de `Autos en Pago` en `Z`;
+- completa `Local` con el stock de `H` buscado en `E:AJ` y devuelve la columna `AJ`;
+- cuando se adjunta la consulta de nota de venta, busca `H` en `E:M` mediante `BUSCARV` y devuelve la columna `M`;
+- renombra cada hoja principal con la sucursal obtenida al buscar su primer stock en `E` y devolver `AJ` (columna 36) desde la consulta; elimina la palabra `Ventas` del nombre;
+- coloca las fórmulas de totales en `J(fin+2):Y(fin+2)`;
 - limpia una coma final en valores monetarios cuando viene desde el archivo de origen;
-- aplica formato de pesos sin decimales y con separador de miles a `J:Z` (por ejemplo `370.824`).
+- convierte valores numéricos de texto con coma final y aplica `#,##0`; Excel los muestra con punto de miles en configuración regional chilena.
 
 La hoja de consulta de nota de venta se mantiene íntegramente sin transformación.
 
@@ -85,4 +88,4 @@ El archivo seleccionado en **Hoja adicional (opcional)** se procesa de forma
 independiente y se agrega al final del resultado. **Nunca se aplica la
 transformación de datos sobre ese archivo.** Sus nombres de hoja se conservan
 (sin extensiones `.xls`, `.xlsx` o `.xlsm`) para permitir, por ejemplo, que una
-hoja llamada `NV` siga siendo utilizada por `XLOOKUP`.
+hoja llamada `NV` siga siendo utilizada por las fórmulas de búsqueda.
