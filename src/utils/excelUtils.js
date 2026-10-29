@@ -130,52 +130,61 @@ function obtenerLimitesHoja(ws) {
   };
 }
 
+// Devuelve el número de la última fila de datos (base 1), excluyendo la fila
+// de totales situada dos filas después del último registro según el script.
+function obtenerFinDatos(ws) {
+  const limites = obtenerLimitesHoja(ws);
+  if (limites.maxR < 0) return 0;
+  const formulaTotal = getCell(ws, limites.maxR, 9)?.f;
+  if (typeof formulaTotal === 'string' && /^SUM\(/i.test(formulaTotal)) {
+    return Math.max(1, limites.maxR - 1);
+  }
+  return limites.maxR + 1;
+}
+
 /**
  * Borra las filas cuya primera columna está vacía.
  *
  * Equivale a la primera parte del Office Script:
  *   if (valores[i][0] === "") -> delete row
  *
- * Se recorre de abajo hacia arriba para conservar correctamente
- * los índices.
+ * Se compactan las filas conservadas una sola vez para evitar sobrescrituras.
  */
 function eliminarFilasConPrimeraColumnaVacia(ws) {
   const limites = obtenerLimitesHoja(ws);
 
   if (limites.maxR < 0) return 0;
-
-  let filasEliminadas = 0;
-
-  for (let r = limites.maxR; r >= limites.minR; r -= 1) {
-    const celdaA = getCell(ws, r, 0);
-    const valor = celdaA?.v;
-
-    if (valor === '' || valor == null) {
-      for (let c = limites.maxC; c >= limites.minC; c -= 1) {
-        delete ws[XLSX.utils.encode_cell({ r, c })];
-      }
-
-      // Mover todas las filas inferiores una posición hacia arriba.
-      for (let rr = r + 1; rr <= limites.maxR; rr += 1) {
-        for (let c = limites.minC; c <= limites.maxC; c += 1) {
-          const origen = getCell(ws, rr, c);
-          setCell(ws, rr - 1, c, origen);
-          delete ws[XLSX.utils.encode_cell({ r: rr, c })];
-        }
-      }
-
-      filasEliminadas += 1;
-    }
+  // Calcula las filas que deben conservarse antes de mover cualquier celda.
+  // El enfoque anterior desplazaba celdas varias veces cuando había filas
+  // vacías consecutivas, sobrescribiendo registros del archivo fuente.
+  const filasConservadas = [];
+  for (let r = limites.minR; r <= limites.maxR; r += 1) {
+    const valor = getCell(ws, r, 0)?.v;
+    if (valor !== '' && valor != null) filasConservadas.push(r);
   }
 
-  const nuevoMaxR = limites.maxR - filasEliminadas;
+  const filasEliminadas = limites.maxR - limites.minR + 1 - filasConservadas.length;
+  const celdasFiltradas = new Map();
+  filasConservadas.forEach((filaOrigen, indice) => {
+    for (let c = limites.minC; c <= limites.maxC; c += 1) {
+      const celda = getCell(ws, filaOrigen, c);
+      if (celda) celdasFiltradas.set(XLSX.utils.encode_cell({ r: limites.minR + indice, c }), celda);
+    }
+  });
 
-  if (nuevoMaxR < limites.minR) {
+  for (let r = limites.minR; r <= limites.maxR; r += 1) {
+    for (let c = limites.minC; c <= limites.maxC; c += 1) {
+      delete ws[XLSX.utils.encode_cell({ r, c })];
+    }
+  }
+  celdasFiltradas.forEach((celda, referencia) => { ws[referencia] = celda; });
+
+  if (filasConservadas.length === 0) {
     delete ws['!ref'];
   } else {
     ws['!ref'] = XLSX.utils.encode_range({
       s: { r: limites.minR, c: limites.minC },
-      e: { r: nuevoMaxR, c: limites.maxC },
+      e: { r: limites.minR + filasConservadas.length - 1, c: limites.maxC },
     });
   }
 
@@ -369,65 +378,6 @@ function normalizarTextoBusqueda(valor) {
     .toLowerCase();
 }
 
-function normalizarEncabezado(valor) {
-  return String(valor ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-}
-
-function encontrarColumnaPorEncabezado(ws, nombres, maxFilas = 10) {
-  const limites = obtenerLimitesHoja(ws);
-  if (limites.maxR < 0) return null;
-
-  const buscados = new Set(nombres.map(normalizarEncabezado));
-  const ultimaFila = Math.min(limites.maxR, maxFilas - 1);
-
-  for (let r = 0; r <= ultimaFila; r += 1) {
-    for (let c = 0; c <= limites.maxC; c += 1) {
-      const valor = getCell(ws, r, c)?.v;
-      if (buscados.has(normalizarEncabezado(valor))) {
-        return { col: c, headerRow: r };
-      }
-    }
-  }
-
-  return null;
-}
-
-function obtenerSucursalPrimeraLinea(ws) {
-  const limites = obtenerLimitesHoja(ws);
-  if (limites.maxR < 0) return 'Consulta Nota de Venta';
-
-  // Primero intenta una celda de la primera línea que contenga "Sucursal".
-  for (let c = 0; c <= limites.maxC; c += 1) {
-    const valor = getCell(ws, 0, c)?.v;
-    if (valor == null || String(valor).trim() === '') continue;
-
-    const texto = String(valor).trim();
-    const match = texto.match(/sucursal\s*[:\-]?\s*(.+)$/i);
-    if (match?.[1]?.trim()) return match[1].trim();
-  }
-
-  // Si la primera fila viene como: Sucursal | Nombre.
-  if (limites.maxC >= 1) {
-    const primero = normalizarEncabezado(getCell(ws, 0, 0)?.v);
-    if (primero === 'sucursal') {
-      const segundo = getCell(ws, 0, 1)?.v;
-      if (segundo != null && String(segundo).trim()) return String(segundo).trim();
-    }
-  }
-
-  // Como último recurso, usa el primer valor no vacío de la primera línea.
-  for (let c = 0; c <= limites.maxC; c += 1) {
-    const valor = getCell(ws, 0, c)?.v;
-    if (valor != null && String(valor).trim()) return String(valor).trim();
-  }
-
-  return 'Consulta Nota de Venta';
-}
-
 function obtenerNombreSucursalSeguro(nombre) {
   return String(nombre || 'Sucursal')
     .replace(/[\\/?*\[\]:]/g, '')
@@ -442,7 +392,7 @@ function obtenerNombreSucursalSeguro(nombre) {
  * - Se ejecuta SOLO sobre las hojas principales.
  * - La hoja/libro adicional se agrega después y nunca pasa por esta función.
  * - La hoja "NV" se conserva sin transformación porque es la tabla de consulta
- *   utilizada por XLOOKUP.
+ *   utilizada por BUSCARV.
  */
 export function transformarHojaSegunScript(ws) {
   if (!ws || !ws['!ref']) {
@@ -472,14 +422,18 @@ export function transformarHojaSegunScript(ws) {
   // O:O delete left
   eliminarColumnas(ws, 14, 1);
   //
-  // Q:Q insert right
-  insertarColumnas(ws, 16, 1);
+  // Reserva U para Costo Kms y desplaza los bonos y márgenes al formato esperado.
+  insertarColumnas(ws, 20, 1);
 
   // 4. Encabezados.
   establecerValor(ws, 'A1', 'No');
   establecerValor(ws, 'K1', 'Costos');
   establecerValor(ws, 'Q1', 'Combustible');
+  establecerValor(ws, 'R1', 'Patente');
   establecerValor(ws, 'T1', 'ADM');
+  establecerValor(ws, 'U1', 'Costo Kms');
+  establecerValor(ws, 'V1', 'Bono Marca');
+  establecerValor(ws, 'W1', 'Bono Financiamiento');
 
   // Quita el relleno del encabezado, equivalente a clear() del fill.
   const encabezado = obtenerLimitesHoja(ws);
@@ -525,6 +479,7 @@ export function transformarHojaSegunScript(ws) {
     }
 
     establecerValor(ws, 'X1', 'Margen Contable');
+    establecerValor(ws, 'Y1', 'Margen Vehículo');
     establecerFormula(
       ws,
       'X2',
@@ -548,38 +503,23 @@ export function transformarHojaSegunScript(ws) {
   }
 
   // 7. Cruce con NV.
+  insertarColumnas(ws, 27, 1);
   establecerValor(ws, 'AA1', 'Chasis');
+  establecerValor(ws, 'AB1', 'Local');
+  establecerValor(ws, 'Z1', 'Autos en Pago');
+  establecerValor(ws, 'AC1', 'Acc');
+  establecerValor(ws, 'AD1', 'Dif');
 
   // El cruce de Chasis se realiza después, cuando la hoja de consulta ya
   // está incorporada al libro. Aquí solo se prepara el encabezado.
 
-  // 8. Fila de totales generales.
-  // Se escribe con valores calculados (no solo con fórmulas) para que el
-  // total sea visible incluso en visores que no recalculan fórmulas de XLSX.
-  const filaTotal = fin + 1;
-  establecerValor(ws, `A${filaTotal}`, 'TOTAL');
-
-  const columnasTotales = [];
-  for (let c = 9; c <= 24; c += 1) columnasTotales.push(c);
-  // Y también es numérica y corresponde a la réplica de X.
-  columnasTotales.push(25);
-
-  const totales = calcularTotalesNumericos(ws, 2, fin, columnasTotales);
-
-  // Los totales se dejan como fórmulas SUM para que sean DINÁMICOS.
-  // Si posteriormente se agregan filas dentro del rango en Excel,
-  // Excel ajustará automáticamente la referencia de la suma.
-  // Se conserva además el valor calculado actual como caché para que
-  // el total sea visible incluso antes de que Excel recalcule el libro.
-  columnasTotales.forEach((c) => {
-    const col = XLSX.utils.encode_col(c);
-    establecerFormula(
-      ws,
-      `${col}${filaTotal}`,
-      `=SUM(${col}2:${col}${fin})`,
-      totales[c] ?? 0,
-    );
-  });
+  // 8. Totales: el script coloca SUM en J(fin+2) y rellena hasta Y.
+  const filaTotal = fin + 2;
+  establecerFormula(ws, `J${filaTotal}`, `=SUM(J2:J${fin})`);
+  for (let col = 11; col <= 25; col += 1) {
+    const letra = XLSX.utils.encode_col(col - 1);
+    establecerFormula(ws, `${letra}${filaTotal}`, `=SUM(${letra}2:${letra}${fin})`);
+  }
 
   // IMPORTANTE: establecerValor() no amplía !ref automáticamente.
   // Extendemos explícitamente el rango para que la fila TOTAL forme parte
@@ -589,16 +529,16 @@ export function transformarHojaSegunScript(ws) {
     s: { r: 0, c: 0 },
     e: {
       r: Math.max(limitesConTotal.maxR, filaTotal - 1),
-      c: Math.max(limitesConTotal.maxC, 25),
+      c: Math.max(limitesConTotal.maxC, 30),
     },
   });
 
-  // 9. Formato monetario J:Z.
-  // Se limpia una coma final que pueda venir desde el archivo de origen
-  // (por ejemplo, "370824,") antes de convertir el valor a número.
+  // 9. Formato numérico con miles. XLSX guarda el separador como coma y Excel
+  // lo muestra como punto en configuración regional chilena. También convierte
+  // cadenas como "370.824," a números reales.
   const rango = obtenerLimitesHoja(ws);
   for (let r = 0; r <= rango.maxR; r += 1) {
-    for (let c = 9; c <= 25; c += 1) {
+    for (let c = 9; c <= 30; c += 1) {
       const celda = getCell(ws, r, c);
       if (!celda) continue;
 
@@ -606,22 +546,31 @@ export function transformarHojaSegunScript(ws) {
       const valorOriginal = copia.v;
 
       if (typeof valorOriginal === 'string') {
-        const texto = valorOriginal.trim();
-        const sinComaFinal = texto.replace(/,$/, '');
+        const texto = valorOriginal.trim().replace(/,$/, '').trim();
+        let numeroNormalizado = null;
 
-        if (sinComaFinal !== texto && /^-?\d+(?:\.\d+)?$/.test(sinComaFinal)) {
-          copia.v = Number(sinComaFinal);
+        if (/^-?\d{1,3}(?:\.\d{3})+$/.test(texto)) {
+          numeroNormalizado = texto.replace(/\./g, '');
+        } else if (/^-?\d+(?:\.\d+)?$/.test(texto)) {
+          numeroNormalizado = texto;
+        } else if (/^-?\d{1,3}(?:\.\d{3})*,\d+$/.test(texto)) {
+          numeroNormalizado = texto.replace(/\./g, '').replace(',', '.');
+        } else if (/^-?\d+,\d+$/.test(texto)) {
+          numeroNormalizado = texto.replace(',', '.');
+        }
+
+        if (numeroNormalizado !== null && Number.isFinite(Number(numeroNormalizado))) {
+          copia.v = Number(numeroNormalizado);
           copia.t = 'n';
         }
       }
 
-      // Pesos chilenos: sin decimales y con separador de miles.
-      // En configuración regional española/chilena se visualiza 370.824.
       copia.z = '#,##0';
       ws[XLSX.utils.encode_cell({ r, c })] = copia;
     }
   }
 
+  // Se conserva Z para Autos en Pago; Chasis, Local, Acc y Dif quedan a continuación.
   normalizarRef(ws);
 }
 
@@ -655,11 +604,12 @@ export function encontrarHojaConsultaNotaVenta(libro) {
 }
 
 /**
- * Agrega/actualiza el cruce de Chasis en la última columna de cada reporte.
+ * Agrega/actualiza el cruce de Chasis en la columna AA.
  *
  * H de cada fila del reporte -> E de la hoja de consulta -> M de la consulta.
- * Se usa INDEX + MATCH en lugar de XLOOKUP para evitar #¿NOMBRE? en
- * versiones de Excel que no soportan XLOOKUP/BUSCARX. La hoja de consulta nunca se modifica.
+ * Busca H en la columna E de la hoja de consulta y devuelve la columna M,
+ * equivalente a BUSCARV(H2;'notas de venta'!$E:$M;9;0). La hoja de consulta
+ * nunca se modifica.
  */
 export function aplicarCruceChasis(libro, nombreHojaConsulta) {
   if (!nombreHojaConsulta || !libro.Sheets[nombreHojaConsulta]) return;
@@ -668,18 +618,7 @@ export function aplicarCruceChasis(libro, nombreHojaConsulta) {
   const limitesConsulta = obtenerLimitesHoja(consulta);
   if (limitesConsulta.maxR < 0) return;
 
-  // Se conserva la regla solicitada originalmente: H del reporte se busca
-  // en E de la consulta y se devuelve M. Se escribe el resultado como valor,
-  // evitando #¿NOMBRE? por diferencias de idioma/versión de Excel.
-  const mapaChasis = new Map();
-  for (let r = 1; r <= limitesConsulta.maxR; r += 1) {
-    const clave = normalizarTextoBusqueda(getCell(consulta, r, 4)?.v);
-    if (!clave || mapaChasis.has(clave)) continue;
-    const chasis = getCell(consulta, r, 12)?.v;
-    if (chasis != null && String(chasis).trim() !== '') {
-      mapaChasis.set(clave, chasis);
-    }
-  }
+  const nombreHojaFormula = nombreHojaConsulta.replace(/'/g, "''");
 
   libro.SheetNames.forEach((nombreHoja) => {
     if (nombreHoja === nombreHojaConsulta) return;
@@ -692,16 +631,14 @@ export function aplicarCruceChasis(libro, nombreHojaConsulta) {
 
     establecerValor(ws, 'AA1', 'Chasis');
 
-    let finDatos = limites.maxR + 1;
-    const ultimaCeldaA = getCell(ws, limites.maxR, 0);
-    if (String(ultimaCeldaA?.v ?? '').trim().toUpperCase() === 'TOTAL') {
-      finDatos -= 1;
-    }
+    const finDatos = obtenerFinDatos(ws);
 
     for (let fila = 2; fila <= finDatos; fila += 1) {
-      const stock = normalizarTextoBusqueda(getCell(ws, fila - 1, 7)?.v);
-      const chasis = mapaChasis.get(stock) ?? 'No Encontrado';
-      establecerValor(ws, `AA${fila}`, chasis);
+      establecerFormula(
+        ws,
+        `AA${fila}`,
+        `=VLOOKUP(H${fila},'${nombreHojaFormula}'!$E:$M,9,FALSE)`,
+      );
     }
 
     const rangoActualizado = obtenerLimitesHoja(ws);
@@ -713,49 +650,21 @@ export function aplicarCruceChasis(libro, nombreHojaConsulta) {
 }
 
 /**
- * Cruza el STOCK del reporte con el STOCK de la consulta y agrega la
- * sucursal encontrada en una columna AB.
- *
- * Se intenta localizar el encabezado "Stock" automáticamente. Si el reporte
- * no lo trae como encabezado, se usa H como respaldo porque es la columna
- * definida por el flujo anterior.
+ * Completa Local usando el mismo cruce por stock que determina el nombre
+ * de cada sucursal: H del reporte contra E:AJ de la consulta, devolviendo AJ.
  */
-export function aplicarCruceSucursalPorStock(libro, nombreHojaConsulta) {
+export function aplicarCruceLocal(libro, nombreHojaConsulta) {
   if (!nombreHojaConsulta || !libro.Sheets[nombreHojaConsulta]) return;
 
-  // La hoja opcional debe conservarse exactamente como "notas de venta".
-  // La columna Sucursal de cada reporte se obtiene mediante BUSCARV/VLOOKUP:
-  //
-  // =BUSCARV(H2;'notas de venta'!$E:$AJ;32;0)
-  //
-  // En el XLSX las fórmulas se almacenan con los nombres internos de Excel,
-  // por eso SheetJS debe escribir VLOOKUP, con comas y FALSE/0. Excel lo
-  // mostrará como BUSCARV según el idioma de la instalación.
-  const hojaConsultaReal = nombreHojaConsulta;
-  const nombreHojaFormula = hojaConsultaReal.replace(/'/g, "''");
-
+  const nombreHojaFormula = nombreHojaConsulta.replace(/'/g, "''");
   libro.SheetNames.forEach((nombreHoja) => {
-    if (nombreHoja === hojaConsultaReal) return;
+    if (nombreHoja === nombreHojaConsulta) return;
 
     const ws = libro.Sheets[nombreHoja];
     if (!ws || !ws['!ref']) return;
 
-    const limites = obtenerLimitesHoja(ws);
-    if (limites.maxR < 1) return;
-
-    // AB = Sucursal.
-    establecerValor(ws, 'AB1', 'Sucursal');
-
-    let finDatos = limites.maxR + 1;
-    const ultimaCeldaA = getCell(ws, limites.maxR, 0);
-
-    // La fila TOTAL no debe recibir BUSCARV.
-    if (String(ultimaCeldaA?.v ?? '').trim().toUpperCase() === 'TOTAL') {
-      finDatos -= 1;
-    }
-
-    // El usuario pidió específicamente H del reporte contra E:AJ de
-    // "notas de venta", devolviendo la columna 32 del rango (AJ).
+    establecerValor(ws, 'AB1', 'Local');
+    const finDatos = obtenerFinDatos(ws);
     for (let fila = 2; fila <= finDatos; fila += 1) {
       establecerFormula(
         ws,
@@ -764,13 +673,10 @@ export function aplicarCruceSucursalPorStock(libro, nombreHojaConsulta) {
       );
     }
 
-    const rangoActualizado = obtenerLimitesHoja(ws);
+    const limites = obtenerLimitesHoja(ws);
     ws['!ref'] = XLSX.utils.encode_range({
       s: { r: 0, c: 0 },
-      e: {
-        r: Math.max(rangoActualizado.maxR, finDatos - 1),
-        c: Math.max(rangoActualizado.maxC, 27),
-      },
+      e: { r: limites.maxR, c: Math.max(limites.maxC, 27) },
     });
   });
 }
@@ -786,7 +692,7 @@ export function aplicarCruceSucursalPorStock(libro, nombreHojaConsulta) {
  */
 
 /**
- * Ajusta el Flete (columna P) según la Sucursal obtenida en AB.
+ * Ajusta el Flete (columna P) según la sucursal encontrada en la consulta.
  *
  * Si la sucursal contiene alguno de estos nombres:
  *   paicavi, trebol, ohiggins, prat
@@ -794,13 +700,15 @@ export function aplicarCruceSucursalPorStock(libro, nombreHojaConsulta) {
  * En cualquier otra sucursal se mantiene en $27.000.
  *
  * Se escribe como fórmula para que el valor sea dinámico y se actualice
- * automáticamente si cambia la Sucursal (AB).
+ * automáticamente si cambia la hoja de consulta.
  * La hoja "notas de venta" queda excluida.
  */
-export function aplicarFletePorSucursal(libro) {
+export function aplicarFletePorSucursal(libro, nombreHojaConsulta) {
   if (!libro) return;
 
   const sucursalesFlete85000 = ['paicavi', 'trebol', 'ohiggins', 'prat'];
+  const nombreHojaFormula = String(nombreHojaConsulta || '').replace(/'/g, "''");
+  if (!nombreHojaFormula || !libro.Sheets[nombreHojaConsulta]) return;
 
   libro.SheetNames.forEach((nombreHoja) => {
     if (normalizarNombreConsulta(nombreHoja) === 'notasdeventa') return;
@@ -814,24 +722,19 @@ export function aplicarFletePorSucursal(libro) {
     const limites = obtenerLimitesHoja(ws);
     if (limites.maxR < 1) return;
 
-    let finDatos = limites.maxR + 1;
-
-    // La última fila TOTAL no recibe el cálculo del Flete.
-    if (String(getCell(ws, limites.maxR, 0)?.v ?? '').trim().toUpperCase() === 'TOTAL') {
-      finDatos -= 1;
-    }
+    let finDatos = obtenerFinDatos(ws);
 
     if (finDatos < 2) return;
 
-    const condiciones = sucursalesFlete85000
-      .map((nombre) => `ISNUMBER(SEARCH("${nombre}",AB2))`)
-      .join(',');
-
     for (let fila = 2; fila <= finDatos; fila += 1) {
-      const formula = `IF(OR(${condiciones.replace(/AB2/g, `AB${fila}`)}),85000,27000)`;
+      const busquedaSucursal = `IFERROR(VLOOKUP(H${fila},'${nombreHojaFormula}'!$E:$AJ,32,FALSE),"")`;
+      const condiciones = sucursalesFlete85000
+        .map((nombre) => `ISNUMBER(SEARCH("${nombre}",${busquedaSucursal}))`)
+        .join(',');
+      const formula = `=IF(OR(${condiciones}),85000,27000)`;
 
-      // P = Flete. Se deja como fórmula para que Excel determine el valor
-      // según la Sucursal de AB en cada fila.
+      // P = Flete. La sucursal se consulta directamente para no ocupar AB,
+      // que pertenece a las columnas Acc/Dif del formato de salida.
       establecerFormula(ws, `P${fila}`, formula, undefined);
 
       const celda = getCell(ws, fila - 1, 15);
@@ -839,6 +742,72 @@ export function aplicarFletePorSucursal(libro) {
         celda.z = '#,##0';
         celda.t = 'n';
       }
+    }
+  });
+
+  return libro;
+}
+
+/**
+ * Renombra cada hoja de reporte según la sucursal asociada a sus stocks.
+ * Busca H del reporte en E de la consulta y obtiene el nombre desde AJ
+ * (columna 36 de la hoja). La hoja de consulta permanece intacta.
+ */
+export function renombrarHojasPorSucursal(libro, nombreHojaConsulta) {
+  const consulta = libro?.Sheets?.[nombreHojaConsulta];
+  if (!consulta || !nombreHojaConsulta) return libro;
+
+  const limitesConsulta = obtenerLimitesHoja(consulta);
+  if (limitesConsulta.maxR < 1 || limitesConsulta.maxC < 35) return libro;
+
+  const sucursalPorStock = new Map();
+  for (let fila = 1; fila <= limitesConsulta.maxR; fila += 1) {
+    const stock = normalizarTextoBusqueda(getCell(consulta, fila, 4)?.v);
+    const sucursal = getCell(consulta, fila, 35)?.v;
+    if (!stock || sucursal == null || !String(sucursal).trim()) continue;
+    if (!sucursalPorStock.has(stock)) sucursalPorStock.set(stock, sucursal);
+  }
+
+  const hojasReporte = libro.SheetNames.filter((nombre) => nombre !== nombreHojaConsulta);
+  hojasReporte.forEach((nombreHoja) => {
+    const ws = libro.Sheets[nombreHoja];
+    if (!ws || !ws['!ref']) return;
+
+    const finDatos = obtenerFinDatos(ws);
+    let sucursalEncontrada = null;
+    for (let fila = 2; fila <= finDatos; fila += 1) {
+      const stock = normalizarTextoBusqueda(getCell(ws, fila - 1, 7)?.v);
+      const sucursal = sucursalPorStock.get(stock);
+      if (sucursal != null && String(sucursal).trim()) {
+        sucursalEncontrada = String(sucursal).trim();
+        break;
+      }
+    }
+    if (!sucursalEncontrada) return;
+
+    const nombreBase = sucursalEncontrada
+      .replace(/\bventas\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const nombreSeguro = obtenerNombreSucursalSeguro(nombreBase);
+    let nombreFinal = nombreSeguro;
+    let contador = 1;
+    while (
+      libro.SheetNames.some(
+        (nombre) => nombre !== nombreHoja && nombre.toLowerCase() === nombreFinal.toLowerCase(),
+      )
+    ) {
+      const sufijo = `_${contador}`;
+      nombreFinal = `${nombreSeguro.substring(0, 31 - sufijo.length)}${sufijo}`;
+      contador += 1;
+    }
+
+    const indice = libro.SheetNames.indexOf(nombreHoja);
+    libro.SheetNames[indice] = nombreFinal;
+    libro.Sheets[nombreFinal] = ws;
+    delete libro.Sheets[nombreHoja];
+    if (libro.Workbook?.Sheets?.[indice]) {
+      libro.Workbook.Sheets[indice].name = nombreFinal;
     }
   });
 
@@ -863,11 +832,7 @@ export function aplicarValorAdmEnHojas(libro, valorAdm) {
     const encabezadoT = String(getCell(ws, 0, 19)?.v ?? '').trim().toUpperCase();
     if (encabezadoT !== 'ADM') return;
 
-    let finDatos = limites.maxR + 1;
-    const ultimaCeldaA = getCell(ws, limites.maxR, 0);
-    if (String(ultimaCeldaA?.v ?? '').trim().toUpperCase() === 'TOTAL') {
-      finDatos -= 1;
-    }
+    let finDatos = obtenerFinDatos(ws);
 
     for (let fila = 2; fila <= finDatos; fila += 1) {
       establecerValor(ws, `T${fila}`, valor);
@@ -878,48 +843,12 @@ export function aplicarValorAdmEnHojas(libro, valorAdm) {
     }
 
     // Mantiene la fórmula dinámica del total de ADM.
-    if (String(ultimaCeldaA?.v ?? '').trim().toUpperCase() === 'TOTAL') {
-      establecerFormula(ws, `T${finDatos + 1}`, `=SUM(T2:T${finDatos})`);
+    if (getCell(ws, limites.maxR, 9)?.f && /^SUM\(/i.test(getCell(ws, limites.maxR, 9).f)) {
+      establecerFormula(ws, `T${finDatos + 2}`, `=SUM(T2:T${finDatos})`);
     }
 
     normalizarRef(ws);
   });
-}
-
-/**
- * Detecta el nombre de la sucursal leyendo la primera línea de la consulta.
- */
-export function detectarNombreSucursal(libro, nombreHojaConsulta) {
-  const ws = libro.Sheets[nombreHojaConsulta];
-  if (!ws) return 'Sucursal';
-  return obtenerNombreSucursalSeguro(obtenerSucursalPrimeraLinea(ws));
-}
-
-/**
- * Renombra la hoja de consulta al nombre de la sucursal detectado.
- * Los datos no se modifican: solamente cambia el nombre de la hoja.
- */
-export function renombrarHojaConsultaPorSucursal(libro, nombreHojaConsulta) {
-  if (!nombreHojaConsulta || !libro.Sheets[nombreHojaConsulta]) return nombreHojaConsulta;
-
-  const nombreSucursal = detectarNombreSucursal(libro, nombreHojaConsulta);
-  let nombreFinal = nombreSucursal;
-  let contador = 1;
-
-  while (
-    libro.SheetNames.some((nombre) => nombre !== nombreHojaConsulta && nombre.toLowerCase() === nombreFinal.toLowerCase())
-  ) {
-    const sufijo = `_${contador}`;
-    nombreFinal = `${nombreSucursal.substring(0, 31 - sufijo.length)}${sufijo}`;
-    contador += 1;
-  }
-
-  const indice = libro.SheetNames.indexOf(nombreHojaConsulta);
-  libro.SheetNames[indice] = nombreFinal;
-  libro.Sheets[nombreFinal] = libro.Sheets[nombreHojaConsulta];
-  delete libro.Sheets[nombreHojaConsulta];
-
-  return nombreFinal;
 }
 
 /**

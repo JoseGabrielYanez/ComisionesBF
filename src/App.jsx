@@ -20,11 +20,10 @@ import {
   agregarHojasAdicionalesSinTransformar,
   transformarLibro,
   aplicarCruceChasis,
+  aplicarCruceLocal,
   encontrarHojaConsultaNotaVenta,
-  detectarNombreSucursal,
-  renombrarHojaConsultaPorSucursal,
-  aplicarCruceSucursalPorStock,
   aplicarFletePorSucursal,
+  renombrarHojasPorSucursal,
   aplicarValorAdmEnHojas,
   quitarExtension,
 } from './utils/excelUtils';
@@ -174,10 +173,10 @@ export default function App() {
           if (hojaConsulta) {
             // La hoja del archivo opcional conserva el nombre "notas de venta".
             // Se utiliza como fuente, sin modificar sus datos.
-            const nombreSucursal = detectarNombreSucursal(libroFinal, hojaConsulta);
             aplicarCruceChasis(libroFinal, hojaConsulta);
-            aplicarCruceSucursalPorStock(libroFinal, hojaConsulta, nombreSucursal);
-            aplicarFletePorSucursal(libroFinal);
+            aplicarCruceLocal(libroFinal, hojaConsulta);
+            aplicarFletePorSucursal(libroFinal, hojaConsulta);
+            renombrarHojasPorSucursal(libroFinal, hojaConsulta);
           }
         }
 
@@ -203,10 +202,10 @@ export default function App() {
             if (hojaConsulta) {
               // La hoja del archivo opcional conserva el nombre "notas de venta".
               // Se utiliza como fuente, sin modificar sus datos.
-              const nombreSucursal = detectarNombreSucursal(libro, hojaConsulta);
               aplicarCruceChasis(libro, hojaConsulta);
-              aplicarCruceSucursalPorStock(libro, hojaConsulta, nombreSucursal);
-              aplicarFletePorSucursal(libro);
+              aplicarCruceLocal(libro, hojaConsulta);
+              aplicarFletePorSucursal(libro, hojaConsulta);
+              renombrarHojasPorSucursal(libro, hojaConsulta);
             }
           }
 
@@ -269,7 +268,7 @@ export default function App() {
     <div className="min-h-screen bg-white text-ink">
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-5 sm:px-8">
         <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line pb-3 animate-rise">
-          <h1 className="font-display text-3xl leading-none">Conversor de Excel</h1>
+          <h1 className="font-display text-3xl leading-none">Formato Comisiones</h1>
           <p className="flex items-center gap-2 text-xs text-mist">
             <Lock className="h-3 w-3 text-brass" strokeWidth={1.5} />
             Todo ocurre en tu navegador; los archivos no se envían a ningún servidor.
@@ -282,7 +281,7 @@ export default function App() {
             <div className="space-y-5">
               <label className="flex cursor-pointer items-start justify-between gap-6">
                 <span>
-                  <span className="block text-sm font-semibold">Unir en un solo XLSX</span>
+                  <span className="block text-sm font-semibold">Unir en un solo Archivo</span>
                   <span className="mt-0.5 block text-xs leading-5 text-mist">
                     Cada archivo pasa a ser una o varias hojas del mismo libro. Sin marcar, se
                     descarga uno por archivo.
@@ -330,9 +329,9 @@ export default function App() {
               </div>
 
               <div className="border-t border-line pt-5">
-                <p className="text-sm font-semibold">Hoja adicional (opcional)</p>
+                <p className="text-sm font-semibold">Archivo de notas de venta (opcional) </p>
                 <p className="mb-2.5 mt-0.5 text-xs leading-5 text-mist">
-                  Se agrega al final del resultado, sin transformar.
+                  Se agrega al final del resultado, sin transformar para cruce de chasis y local.
                 </p>
                 {archivoExtra ? (
                   <div className="flex items-center justify-between gap-3 rounded-sm bg-wash px-3 py-2 text-sm">
