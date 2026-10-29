@@ -180,8 +180,8 @@ export default function App() {
           }
         }
 
-        descargarBlob(libroABlob(libroFinal), 'archivo_unido.xlsx');
-        setExito('Listo: se descargó archivo_unido.xlsx');
+        descargarBlob(libroABlob(libroFinal), 'comisiones.xlsx');
+        setExito('Listo: se descargó comisiones.xlsx');
       } else {
         const salidas = librosPrincipales.map(({ nombre, libro }) => {
           if (libroExtra) {
@@ -236,7 +236,7 @@ export default function App() {
     cantidad === 0
       ? 'Agrega al menos un archivo para continuar.'
       : unirTodo
-        ? `Se descargará archivo_unido.xlsx con ${cantidad} ${cantidad === 1 ? 'archivo' : 'archivos'}${archivoExtra ? ' y la hoja adicional al final' : ''}.`
+        ? `Se descargará comisiones.xlsx con ${cantidad} ${cantidad === 1 ? 'archivo' : 'archivos'}${archivoExtra ? ' y la hoja adicional al final' : ''}.`
         : cantidad === 1
           ? `Se descargará ${quitarExtension(archivos[0].name)}.xlsx.`
           : `Se descargará archivos_convertidos.zip con ${cantidad} archivos.`;
