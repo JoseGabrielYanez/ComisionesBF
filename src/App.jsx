@@ -268,7 +268,7 @@ export default function App() {
     <div className="min-h-screen bg-white text-ink">
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-5 sm:px-8">
         <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line pb-3 animate-rise">
-          <h1 className="font-display text-3xl leading-none">Conversor de Excel</h1>
+          <h1 className="font-display text-3xl leading-none">Comisiones 2026 </h1>
           <p className="flex items-center gap-2 text-xs text-mist">
             <Lock className="h-3 w-3 text-brass" strokeWidth={1.5} />
             Todo ocurre en tu navegador; los archivos no se envían a ningún servidor.
