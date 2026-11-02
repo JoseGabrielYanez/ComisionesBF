@@ -442,16 +442,17 @@ export function transformarHojaSegunScript(ws) {
   //
   // O:O delete left
   eliminarColumnas(ws, 14, 1);
+  // Reserva Y para Margen Vehículo; conserva Autos en Pago en Z.
+  insertarColumnas(ws, 24, 1);
   //
-  // Q:Q insert right: separa Combustible de Patente e Intereses.
-  insertarColumnas(ws, 16, 1);
 
   // 4. Encabezados.
   establecerValor(ws, 'A1', 'No');
   establecerValor(ws, 'K1', 'Costos');
   establecerValor(ws, 'Q1', 'Combustible');
-  establecerValor(ws, 'R1', 'Patente');
-  establecerValor(ws, 'S1', 'Intereses');
+  // Tras insertar A/K y eliminar M:N/O, Intereses queda en R.
+  // Solo se corrige el encabezado; no se cambia ningún valor de R2:R(fin).
+  establecerValor(ws, 'R1', 'Intereses');
   establecerValor(ws, 'T1', 'ADM');
   establecerValor(ws, 'U1', 'Costo Kms');
   establecerValor(ws, 'V1', 'Bono Veh');
@@ -601,7 +602,7 @@ export function transformarHojaSegunScript(ws) {
     }
   }
 
-  // Se conserva Z para Autos en Pago; Chasis, Local, Acc y Dif quedan a continuación.
+  // Z conserva Autos en Pago después de reservar Y para Margen Vehículo.
   normalizarRef(ws);
 }
 

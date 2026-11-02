@@ -268,7 +268,7 @@ export default function App() {
     <div className="min-h-screen bg-white text-ink">
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-5 sm:px-8">
         <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line pb-3 animate-rise">
-          <h1 className="font-display text-3xl leading-none">Comisiones 2026 </h1>
+          <h1 className="font-display text-3xl leading-none">Comisiones BF</h1>
           <p className="flex items-center gap-2 text-xs text-mist">
             <Lock className="h-3 w-3 text-brass" strokeWidth={1.5} />
             Todo ocurre en tu navegador; los archivos no se envían a ningún servidor.
@@ -329,9 +329,9 @@ export default function App() {
               </div>
 
               <div className="border-t border-line pt-5">
-                <p className="text-sm font-semibold">Archivo de Notas de venta (opcional)</p>
+                <p className="text-sm font-semibold">Archivo Consulta notas de venta(opcional)</p>
                 <p className="mb-2.5 mt-0.5 text-xs leading-5 text-mist">
-                  Se agrega al final del resultado, sin transformar, solo extrae el Vin y local para completar comisiones.
+                  Se agrega al final del resultado, sin transformar, para obtener Chasis y Sucursal.
                 </p>
                 {archivoExtra ? (
                   <div className="flex items-center justify-between gap-3 rounded-sm bg-wash px-3 py-2 text-sm">

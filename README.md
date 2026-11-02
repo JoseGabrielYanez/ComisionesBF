@@ -68,7 +68,9 @@ al Office Script indicado para este conversor:
 
 - elimina filas con la primera columna vacía;
 - inserta/elimina las columnas en la misma secuencia del script (la inserción opcional de Q permanece desactivada);
-- crea `No`, `Costos`, `Combustible`, `ADM` y la columna `Costo Kms`;
+- crea `No`, `Costos`, `Combustible`, `ADM` y `Agp` en las posiciones del Office Script;
+- conserva `Intereses` en R, la posición que resulta de aplicar al archivo base las inserciones y eliminaciones del Office Script;
+- reserva Y para `Margen Vehículo` y conserva el campo original `Autos en Pago` en Z;
 - organiza bonos y márgenes en las columnas de la plantilla, y conserva `Autos en Pago`, `Acc` y `Dif`;
 - rellena `No`, `Combustible` y el costo fijo;
 - genera las fórmulas de `Agp`, `Margen Contable` y `Y`;
