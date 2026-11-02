@@ -443,14 +443,15 @@ export function transformarHojaSegunScript(ws) {
   // O:O delete left
   eliminarColumnas(ws, 14, 1);
   //
-  // Reserva U para Costo Kms y desplaza los bonos y márgenes al formato esperado.
-  insertarColumnas(ws, 20, 1);
+  // Q:Q insert right: separa Combustible de Patente e Intereses.
+  insertarColumnas(ws, 16, 1);
 
   // 4. Encabezados.
   establecerValor(ws, 'A1', 'No');
   establecerValor(ws, 'K1', 'Costos');
   establecerValor(ws, 'Q1', 'Combustible');
   establecerValor(ws, 'R1', 'Patente');
+  establecerValor(ws, 'S1', 'Intereses');
   establecerValor(ws, 'T1', 'ADM');
   establecerValor(ws, 'U1', 'Costo Kms');
   establecerValor(ws, 'V1', 'Bono Veh');
