@@ -329,9 +329,9 @@ export default function App() {
               </div>
 
               <div className="border-t border-line pt-5">
-                <p className="text-sm font-semibold">Hoja adicional (opcional)</p>
+                <p className="text-sm font-semibold">Archivo de Notas de venta (opcional)</p>
                 <p className="mb-2.5 mt-0.5 text-xs leading-5 text-mist">
-                  Se agrega al final del resultado, sin transformar.
+                  Se agrega al final del resultado, sin transformar, solo extrae el Vin y local para completar comisiones.
                 </p>
                 {archivoExtra ? (
                   <div className="flex items-center justify-between gap-3 rounded-sm bg-wash px-3 py-2 text-sm">
